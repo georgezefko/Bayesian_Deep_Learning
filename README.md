@@ -1,4 +1,4 @@
-Bayeasian Deep Learning for learned augmented data
+Bayesian Deep Learning for learned augmented data
 ==============================
 
 A short description of the project.
