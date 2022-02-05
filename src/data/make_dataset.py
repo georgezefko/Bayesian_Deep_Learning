@@ -124,5 +124,3 @@ def data(batch_size, crop_size, misplacement=True):
     return train_loader, test_loader
 
 
-if __name__ == "__main__":
-    train, test = data(128, 128, True)
