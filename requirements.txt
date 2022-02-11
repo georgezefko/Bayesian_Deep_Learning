@@ -21,3 +21,4 @@ numpy
 scikit-learn
 torchdrift
 wandb
+shutil
