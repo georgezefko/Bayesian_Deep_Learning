@@ -18,7 +18,7 @@ from src.data import make_dataset
 from src.utils import SaveLoad
 
 
-def train(check_path, model_path, valid_loss_min_input=0.05):
+def train(check_path, model_path, valid_loss_min_input=0.05, misplacement=False):
     # Check if there is a GPU available to use
     if torch.cuda.is_available():
         print("The code will run on GPU.")
@@ -41,7 +41,7 @@ def train(check_path, model_path, valid_loss_min_input=0.05):
     hype = hp().config
 
     train_loader, test_loader = make_dataset.data(
-        hype["batch_size"], hype["crop_size"], misplacement=True
+        hype["batch_size"], hype["crop_size"], misplacement
     )
 
     log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -73,7 +73,7 @@ def train(check_path, model_path, valid_loss_min_input=0.05):
 
         wandb.watch(model, optimizer, log="all", log_freq=10)
         train_loss = 0
-        train_correct =0
+        train_correct = 0
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
@@ -85,7 +85,6 @@ def train(check_path, model_path, valid_loss_min_input=0.05):
             optimizer.step()
             train_loss += loss.item()
             train_correct += output.eq(target.view_as(output)).sum().item()
-
 
             if batch_idx % 500 == 0:
                 wandb.log({"epoch": epoch, "loss": loss.item()})
