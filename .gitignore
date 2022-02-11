@@ -93,3 +93,6 @@ notebooks/wandb
 
 #mnist
 src/data/MNIST
+notebooks/MNIST
+notebooks/src
+

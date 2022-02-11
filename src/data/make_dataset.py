@@ -104,7 +104,7 @@ def data(batch_size, crop_size, misplacement=True):
             ),
             batch_size=batch_size,
             shuffle=True,
-            num_workers=4,
+            num_workers=2,
         )
 
         # Test dataset
@@ -118,9 +118,7 @@ def data(batch_size, crop_size, misplacement=True):
             ),
             batch_size=batch_size,
             shuffle=True,
-            num_workers=4,
+            num_workers=2,
         )
 
     return train_loader, test_loader
-
-
