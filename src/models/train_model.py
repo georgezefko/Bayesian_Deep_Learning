@@ -4,7 +4,6 @@ import pickle
 from pathlib import Path
 import wandb
 
-import gdown
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -18,7 +17,13 @@ from src.data import make_dataset
 from src.utils import SaveLoad
 
 
-def train(check_path, model_path, valid_loss_min_input=0.05, misplacement=False):
+def train(
+    check_path,
+    model_path,
+    valid_loss_min_input=0.05,
+    misplacement=False,
+    parameterize=False,
+):
     # Check if there is a GPU available to use
     if torch.cuda.is_available():
         print("The code will run on GPU.")
@@ -44,6 +49,12 @@ def train(check_path, model_path, valid_loss_min_input=0.05, misplacement=False)
         hype["batch_size"], hype["crop_size"], misplacement
     )
 
+    dataiter = iter(train_loader)
+    images, _ = dataiter.next()
+    height = images.shape[1]
+    width = images.shape[2]
+    print("image shape", images.shape)
+
     log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     logging.basicConfig(level=logging.INFO, format=log_fmt)
     logger = logging.getLogger(__name__)
@@ -55,19 +66,26 @@ def train(check_path, model_path, valid_loss_min_input=0.05, misplacement=False)
         hype["channels"],
         hype["filter1_out"],
         hype["filter2_out"],
-        hype["image_height"],
-        hype["image_width"],
+        hype["kernel_size"],
         hype["padding"],
         hype["stride"],
-        hype["kernel_size"],
+        height,
+        width,
         hype["pool"],
+        parameterize=False,
     )
     model = model.to(device)
 
-    optimizer = optim.Adam(model.parameters(), lr=hype["learning_rate"])
+    optimizer = optim.Adam(model.parameters(), lr=hype["lr"])
 
     # initialize tracker for minimum validation loss
     valid_loss_min = valid_loss_min_input
+    # initialize wandb
+    wandb.init(
+        project="Bayesian DL",
+        name="STN_DEEP_MNIST_MisPlacement_thetafix",
+        entity="zefko",
+    )
 
     for epoch in range(1, hype["epochs"] + 1):
 

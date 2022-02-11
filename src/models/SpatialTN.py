@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from utils.compute_dim import compute_conv_dim, compute_pool_dim
-from utils.AffineTransform import make_affine_parameters
+from src.utils import compute_dim
+from src.utils import AffineTransform
 
 
 class Net(nn.Module):
@@ -18,7 +18,7 @@ class Net(nn.Module):
         height,
         width,
         pool,
-        scale,
+        parameterize,
     ):
         super(Net, self).__init__()
         self.num_classes = (num_classes,)
@@ -31,27 +31,34 @@ class Net(nn.Module):
         self.height = (height,)
         self.width = (width,)
         self.pool = (pool,)
-        self.scale = (scale,)
-        parameterize = self.scale in ["scale"]
+        self.parameterize = parameterize
 
         self.conv1 = nn.Conv2d(channels, filter_1_out, kernel_size)
         # evaluating image dimensions after first connvolution
-        self.conv1_out_height = compute_conv_dim(height, kernel_size, padding, stride)
-        self.conv1_out_width = compute_conv_dim(width, kernel_size, padding, stride)
+        self.conv1_out_height = compute_dim.compute_conv_dim(
+            height, kernel_size, padding, stride
+        )
+        self.conv1_out_width = compute_dim.compute_conv_dim(
+            width, kernel_size, padding, stride
+        )
 
         # first pooling
         self.pool1 = nn.MaxPool2d(pool, pool)
         # evaluating image dimensions after first pooling
-        self.conv2_out_height = compute_pool_dim(self.conv1_out_height, pool, pool)
-        self.conv2_out_width = compute_pool_dim(self.conv1_out_width, pool, pool)
+        self.conv2_out_height = compute_dim.compute_pool_dim(
+            self.conv1_out_height, pool, pool
+        )
+        self.conv2_out_width = compute_dim.compute_pool_dim(
+            self.conv1_out_width, pool, pool
+        )
 
         # Second Convolution
         self.conv2 = nn.Conv2d(filter_1_out, filter_2_out, kernel_size)
         # evaluating image dimensions after second convolution
-        self.conv3_out_height = compute_conv_dim(
+        self.conv3_out_height = compute_dim.compute_conv_dim(
             self.conv2_out_height, kernel_size, padding, stride
         )
-        self.conv3_out_width = compute_conv_dim(
+        self.conv3_out_width = compute_dim.compute_conv_dim(
             self.conv2_out_width, kernel_size, padding, stride
         )
         self.conv2_drop = nn.Dropout2d()
@@ -59,8 +66,12 @@ class Net(nn.Module):
         # Second pooling
         self.pool2 = nn.MaxPool2d(pool, pool)
         # evaluating image dimensions after second pooling
-        self.conv4_out_height = compute_pool_dim(self.conv3_out_height, pool, pool)
-        self.conv4_out_width = compute_pool_dim(self.conv3_out_width, pool, pool)
+        self.conv4_out_height = compute_dim.compute_pool_dim(
+            self.conv3_out_height, pool, pool
+        )
+        self.conv4_out_width = compute_dim.compute_pool_dim(
+            self.conv3_out_width, pool, pool
+        )
 
         self.fc1 = nn.Linear(
             filter_2_out * self.conv4_out_height * self.conv4_out_width, 50
@@ -83,11 +94,11 @@ class Net(nn.Module):
             # nn.Linear(10 * 3 * 3, 32),#original
             nn.Linear(10 * 28 * 28, 32),
             nn.ReLU(True),
-            nn.Linear(32, 2 * 1 if parameterize else 3 * 2),
+            nn.Linear(32, 2 * 1 if self.parameterize else 3 * 2),
         )
 
         # Initialize the weights/bias with identity transformation
-        if parameterize:
+        if self.parameterize:
             self.fc_loc[2].weight.data.zero_()
             self.fc_loc[2].bias.data.copy_(torch.tensor([1], dtype=torch.float))
 
@@ -110,7 +121,7 @@ class Net(nn.Module):
         theta = self.fc_loc(xs)
         # print('theta before view',theta.shape)
         if self.parameterize:
-            theta = make_affine_parameters(theta)
+            theta = AffineTransform.make_affine_parameters(theta)
         else:
             theta = theta.view(-1, 2, 3)
         # print('theta',theta.shape)
