@@ -90,6 +90,7 @@ target/
 
 #wandb
 notebooks/wandb
+wandb/
 
 #mnist
 src/data/MNIST

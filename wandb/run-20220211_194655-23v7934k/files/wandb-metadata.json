@@ -1,0 +1,27 @@
+{
+    "os": "macOS-10.16-x86_64-i386-64bit",
+    "python": "3.8.12",
+    "heartbeatAt": "2022-02-11T18:46:57.689529",
+    "startedAt": "2022-02-11T18:46:55.966643",
+    "docker": null,
+    "cpu_count": 8,
+    "cuda": null,
+    "args": [
+        "-m",
+        "True",
+        "-pr",
+        "True"
+    ],
+    "state": "running",
+    "program": "src/models/exectute_model.py",
+    "codePath": "src/models/exectute_model.py",
+    "git": {
+        "remote": "https://github.com/georgezefko/Bayesian_Deep_Learning.git",
+        "commit": "b636f7b4382269a55b4a905df18214ef35ddca29"
+    },
+    "email": "46191927+georgezefko@users.noreply.github.com",
+    "root": "/Users/georgioszefkilis/Bayesian_Deep_Learning",
+    "host": "Georgioss-MacBook-Pro.local",
+    "username": "georgioszefkilis",
+    "executable": "/Users/georgioszefkilis/anaconda3/anaconda3/envs/Bayesian_DL/bin/python"
+}

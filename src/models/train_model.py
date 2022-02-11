@@ -16,6 +16,8 @@ from src.models.Hyperparameters import Hyperparameters as hp
 from src.data import make_dataset
 from src.utils import SaveLoad
 
+from src.utils import visualization
+
 
 def train(
     check_path,
@@ -51,8 +53,8 @@ def train(
 
     dataiter = iter(train_loader)
     images, _ = dataiter.next()
-    height = images.shape[1]
-    width = images.shape[2]
+    height = images.shape[2]
+    width = images.shape[3]
     print("image shape", images.shape)
 
     log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -61,7 +63,7 @@ def train(
     logger.info("Training STN")
 
     # Initialize the model and transfer to GPU if available
-    model = Net(
+    STN = Net(
         hype["num_classes"],
         hype["channels"],
         hype["filter1_out"],
@@ -72,9 +74,9 @@ def train(
         height,
         width,
         hype["pool"],
-        parameterize=False,
+        parameterize,
     )
-    model = model.to(device)
+    model = STN.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=hype["lr"])
 
@@ -91,7 +93,6 @@ def train(
 
         wandb.watch(model, optimizer, log="all", log_freq=10)
         train_loss = 0
-        train_correct = 0
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
@@ -102,7 +103,6 @@ def train(
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
-            train_correct += output.eq(target.view_as(output)).sum().item()
 
             if batch_idx % 500 == 0:
                 wandb.log({"epoch": epoch, "loss": loss.item()})
@@ -170,3 +170,6 @@ def train(
             # save checkpoint as best model
             SaveLoad.save_ckp(checkpoint, True, checkpoint_path, best_model_path)
             valid_loss_min = test_loss
+
+            #log the stn outputs
+            visualization.wandb_pred(model,test_loader,device)

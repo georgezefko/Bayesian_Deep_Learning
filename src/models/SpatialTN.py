@@ -76,7 +76,6 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(
             filter_2_out * self.conv4_out_height * self.conv4_out_width, 50
         )
-        # print(self.fc1)
         self.fc2 = nn.Linear(50, num_classes)
 
         # Spatial transformer localization-network
@@ -88,8 +87,7 @@ class Net(nn.Module):
             nn.MaxPool2d(2, stride=2),
             nn.ReLU(True),
         )
-        # apply laplace to the last linera layer for the first attempt
-        # Regressor for the 3 * 2 affine matrix
+        # Regressor for the affine matrix
         self.fc_loc = nn.Sequential(
             # nn.Linear(10 * 3 * 3, 32),#original
             nn.Linear(10 * 28 * 28, 32),
@@ -110,23 +108,17 @@ class Net(nn.Module):
 
     # Spatial transformer network forward function
     def stn(self, x):
-        # print('x',x.size())
         xs = self.localization(x)
 
-        # print('xs',xs.size())
         # xs = xs.view(-1, 10 * 3 * 3) #original
         xs = xs.view(-1, 10 * 28 * 28)
 
-        # print('xs view',xs.size())
         theta = self.fc_loc(xs)
-        # print('theta before view',theta.shape)
+
         if self.parameterize:
             theta = AffineTransform.make_affine_parameters(theta)
         else:
             theta = theta.view(-1, 2, 3)
-        # print('theta',theta.shape)
-        # print(theta)
-        # print('size',x.size())
 
         grid = F.affine_grid(theta, x.size(), align_corners=True)
         x = F.grid_sample(x, grid)
@@ -135,38 +127,21 @@ class Net(nn.Module):
 
     def forward(self, x):
 
-        # print('input',x.size())
         # transform the input
         x = self.stn(x)
 
-        # print('transform',x.size())
-        # Perform the usual forward pass
         # convolutional layer 1
         x = F.relu(self.pool1(self.conv1(x)))
-        # print('forward1',x.size())
 
         # convolutional layer 2
         x = F.relu(self.pool2(self.conv2_drop(self.conv2(x))))
-        # print('forward2',x.size())
 
-        # convolutional layer 3
-        # x = F.relu(self.pool3(self.conv3_drop(self.conv3(x))))
-        # print('forward3',x.size())
-
-        # x = x.view(-1, 320) #original
-        # print(self.conv3_out_height)
-        # print(self.conv4_out_width)
-        x = x.view(-1, self.filter_2_out * self.conv4_out_height * self.conv4_out_width)
-
-        # print('flatten',x.size())
+        x = x.view(
+            -1, self.filter_2_out[0] * self.conv4_out_height * self.conv4_out_width
+        )
 
         x = F.relu(self.fc1(x))
-        # print('forward4',x.size())
-
         x = F.dropout(x, training=self.training)
-        # print('forward5',x.size())
-
         x = self.fc2(x)
-        # print('forward6',x.size())
 
         return F.log_softmax(x, dim=1)
