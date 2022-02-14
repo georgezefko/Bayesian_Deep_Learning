@@ -85,7 +85,7 @@ def train(
     # initialize wandb
     wandb.init(
         project="Bayesian DL",
-        name="STN_DEEP_MNIST_MisPlacement_thetafix",
+        name="STN_DEEP_MNIST_ver_3",
         entity="zefko",
     )
 
@@ -159,6 +159,8 @@ def train(
 
         # save checkpoint
         SaveLoad.save_ckp(checkpoint, False, checkpoint_path, best_model_path)
+        # log the stn outputs
+        visualization.wandb_pred(model, test_loader, device)
 
         ## TODO: save the model if validation loss has decreased
         if test_loss <= valid_loss_min:
@@ -170,6 +172,3 @@ def train(
             # save checkpoint as best model
             SaveLoad.save_ckp(checkpoint, True, checkpoint_path, best_model_path)
             valid_loss_min = test_loss
-
-            #log the stn outputs
-            visualization.wandb_pred(model,test_loader,device)

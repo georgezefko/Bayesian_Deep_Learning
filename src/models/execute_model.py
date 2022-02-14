@@ -6,8 +6,10 @@ from src.models.train_model import train
 
 
 @click.command()
-@click.argument("check_path", type=click.Path(), default="models/checkpoint.pth")
-@click.argument("model_path", type=click.Path(), default="models/best_model.pth")
+@click.argument("check_path", type=click.Path(), default="models/STN_MNIST_10_CPU.pth")
+@click.argument(
+    "model_path", type=click.Path(), default="models/best_STN_MNIST_10_CPU.pth"
+)
 @click.option(
     "-val",
     "--valid_loss_min_input",

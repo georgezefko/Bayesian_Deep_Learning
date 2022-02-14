@@ -89,19 +89,18 @@ class Net(nn.Module):
         )
         # Regressor for the affine matrix
         self.fc_loc = nn.Sequential(
-            # nn.Linear(10 * 3 * 3, 32),#original
+            #nn.Linear(10 * 3 * 3, 32),  # original
             nn.Linear(10 * 28 * 28, 32),
             nn.ReLU(True),
             nn.Linear(32, 2 * 1 if self.parameterize else 3 * 2),
         )
 
         # Initialize the weights/bias with identity transformation
+        self.fc_loc[2].weight.data.zero_()
         if self.parameterize:
-            self.fc_loc[2].weight.data.zero_()
             self.fc_loc[2].bias.data.copy_(torch.tensor([1], dtype=torch.float))
 
         else:
-            self.fc_loc[2].weight.data.zero_()
             self.fc_loc[2].bias.data.copy_(
                 torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float)
             )
@@ -110,7 +109,7 @@ class Net(nn.Module):
     def stn(self, x):
         xs = self.localization(x)
 
-        # xs = xs.view(-1, 10 * 3 * 3) #original
+        #xs = xs.view(-1, 10 * 3 * 3)  # original
         xs = xs.view(-1, 10 * 28 * 28)
 
         theta = self.fc_loc(xs)
