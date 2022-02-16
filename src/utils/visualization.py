@@ -14,10 +14,10 @@ def convert_image_np(inp):
     return inp
 
 
-def wandb_pred(model, test_loader, device, epoch):
+def wandb_pred(model, test_loader, device):
     # create a wandb Artifact to version each test step separately
     test_data_at = wandb.Artifact(
-        "test_samples_" + str(wandb.run.id), type=f'"Transformations at"{epoch}'
+        "test_samples_" + str(wandb.run.id), type="Transformations"
     )
     # create a wandb.Table() in which to store predictions for each test step
     columns = ["Grid in", "Grid out"]
@@ -42,5 +42,5 @@ def wandb_pred(model, test_loader, device, epoch):
         test_table.add_data(wandb.Image(in_grid), wandb.Image(out_grid))
 
     # log predictions table to wandb
-    test_data_at.add(test_table, f'"Transformations at"{epoch}')
+    test_data_at.add(test_table, "Transformations")
     wandb.run.log_artifact(test_data_at)

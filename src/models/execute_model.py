@@ -31,6 +31,7 @@ from src.models.train_model import train
     default=False,
     help="Select false to train only the scale theta parameters use only on misplacement MNIST (default=False)",
 )
+
 def execute_model(
     check_path, model_path, valid_loss_min_input, misplacement, parameterize
 ):

@@ -96,4 +96,5 @@ wandb/
 src/data/MNIST
 notebooks/MNIST
 notebooks/src
+src/models/src
 

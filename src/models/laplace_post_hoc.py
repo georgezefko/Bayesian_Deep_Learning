@@ -25,7 +25,7 @@ from netcal.metrics import ECE
 
 @click.command()
 @click.argument(
-    "model_path", type=click.Path(), default="models/colab_misMNIST_100.pth"
+    "model_path", type=click.Path(), default="models/colab_misMNIST_20_ver_2.pth"
 )
 @click.option(
     "-m",
@@ -64,7 +64,7 @@ def laplace(model_path, misplacement=False, parameterize=False):
 
     targets = torch.cat([y for x, y in test_loader], dim=0)  # .numpy()
 
-    dataiter = iter(train_loader)
+    dataiter = iter(test_loader)
     images, _ = dataiter.next()
     height = images.shape[2]
     width = images.shape[3]
@@ -100,12 +100,6 @@ def laplace(model_path, misplacement=False, parameterize=False):
     # initialize state_dict from checkpoint to model
     model.load_state_dict(checkpoint["state_dict"])
 
-    # start laplace
-    # probs_map = predict(test_loader, model, laplace=False)
-    # acc_map = (probs_map.argmax(-1) == targets).mean()
-    # torch_prob = torch.from_numpy(probs_map)
-    # torch_target = torch.from_numpy(targets)
-    # nll_map = -dists.Categorical(torch_prob).log_prob(torch_target).mean()
     probs_map = predict(test_loader, model, laplace=False)
     print(probs_map)
     acc_map = (probs_map.argmax(-1) == targets).float().mean()
@@ -115,6 +109,21 @@ def laplace(model_path, misplacement=False, parameterize=False):
     logger.info(f"[MAP] Acc.: {acc_map:.1%}; ECE: {ece_map:.1%}; NLL: {nll_map:.3}")
     print(f"[MAP] Acc.: {acc_map:.1%}; ECE: {ece_map:.1%}; NLL: {nll_map:.3}")
 
+
+    # subnetwork_mask = ModuleNameSubnetMask(model, module_names=['fc_loc.2'])
+    # subnetwork_mask.select()
+    # subnetwork_indices = subnetwork_mask.indices
+
+    # la = Laplace(
+    #     model,
+    #     "regression",
+    #     subset_of_weights="subnetwork",
+    #     hessian_structure="full",
+    #     subnetwork_indices = subnetwork_indices,
+    # )
+    # la.fit(train_loader)
+    # la.optimize_prior_precision(method="marglik")
+
     la = Laplace(
         model,
         "classification",
@@ -123,12 +132,7 @@ def laplace(model_path, misplacement=False, parameterize=False):
     )
     la.fit(train_loader)
     la.optimize_prior_precision(method="marglik")
-    # probs_laplace = predict(test_loader, la, laplace=True)
-    # acc_laplace = (probs_laplace.argmax(-1) == targets).float().mean()
-    # nll_laplace = -dists.Categorical(probs_laplace).log_prob(targets).mean()
 
-    # logger.info(f"[Laplace] Acc.: {acc_laplace:.1%}; NLL: {nll_laplace:.3}")
-    # print(f"[Laplace] Acc.: {acc_laplace:.1%}; NLL: {nll_laplace:.3}")
     probs_laplace = predict(test_loader, la, laplace=True)
     acc_laplace = (probs_laplace.argmax(-1) == targets).float().mean()
     ece_laplace = ECE(bins=15).measure(probs_laplace.numpy(), targets.numpy())

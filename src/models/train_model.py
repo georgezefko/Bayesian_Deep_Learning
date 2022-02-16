@@ -79,6 +79,7 @@ def train(
     model = STN.to(device)
 
     optimizer = optim.Adam(model.parameters(), lr=hype["lr"])
+    criterion = nn.CrossEntropyLoss()
 
     # initialize tracker for minimum validation loss
     valid_loss_min = valid_loss_min_input
@@ -99,7 +100,7 @@ def train(
 
             optimizer.zero_grad()
             output = model(data)
-            loss = F.nll_loss(output, target)
+            loss = criterion(output, target)
             loss.backward()
             optimizer.step()
             train_loss += loss.item()
@@ -126,7 +127,7 @@ def train(
                 output = model(data)
 
                 # sum up batch loss
-                test_loss += F.nll_loss(output, target, size_average=False).item()
+                test_loss += criterion(output, target, size_average=False).item()
                 # get the index of the max log-probability
                 pred = output.max(1, keepdim=True)[1]
                 correct += pred.eq(target.view_as(pred)).sum().item()
