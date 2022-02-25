@@ -2,7 +2,7 @@ class Hyperparameters:
     def __init__(
         self,
         config={
-            "batch_size": 128,
+            "batch_size": 64,
             "num_classes": 10,
             "channels": 1,
             "filter1_out": 16,
@@ -11,9 +11,11 @@ class Hyperparameters:
             "filter2_out": 32,
             "padding": 0,
             "stride": 1,
-            "lr": 0.01,
-            "epochs": 10,
+            "lr": 0.001,
+            "epochs": 5,
             "crop_size": 128,
+            "enc_sizes":[16,32],
+            "loc_sizes":[8,10],
         },
     ):
         super().__init__()

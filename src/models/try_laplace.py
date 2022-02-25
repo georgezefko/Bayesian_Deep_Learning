@@ -3,12 +3,18 @@ from pathlib import Path
 from importlib_metadata import requires
 from numpy import False_
 import torch
-from src.models.SpatialTN import Net
+#from src.models.SpatialTN import Net
+from src.models.SpatialTN_2 import Net
 from src.models.Hyperparameters import Hyperparameters as hp
 from src.utils import SaveLoad
 from src.data import make_dataset
 import click
 import torch.distributions as dists
+import numpy as np
+import torchvision
+import matplotlib.pyplot as plt
+
+
 from netcal.metrics import ECE
 from laplace import Laplace
 from laplace.baselaplace import FullLaplace
@@ -21,7 +27,7 @@ from laplace.utils import ModuleNameSubnetMask
 @click.argument(
     "trained_model_filepath",
     type=click.Path(),
-    default="models/colab_misMNIST_20_ver_2.pth",
+    default="models/colab_best_MNIST_STN2_20_ver_1.pth",
 )
 @click.option(
     "-m",
@@ -44,6 +50,38 @@ from laplace.utils import ModuleNameSubnetMask
     default=False,
     help="Select laplace approximation for theta parameters (default=False)",
 )
+
+# def convert_image_np(inp):
+#     """Convert a Tensor to numpy image."""
+#     inp = inp.numpy().transpose((1, 2, 0))
+#     mean = np.array([0.485, 0.456, 0.406])
+#     std = np.array([0.229, 0.224, 0.225])
+#     inp = std * inp + mean
+#     inp = np.clip(inp, 0, 1)
+#     return inp
+
+# def visualize_stn():
+#     with torch.no_grad():
+#         # Get a batch of training data
+
+#         input_tensor = data.cpu()
+#         transformed_input_tensor = la.cpu()
+
+#         in_grid = convert_image_np(
+#             torchvision.utils.make_grid(input_tensor))
+
+#         out_grid = convert_image_np(
+#             torchvision.utils.make_grid(transformed_input_tensor))
+
+#         # Plot the results side-by-side
+#         f, axarr = plt.subplots(1, 2,figsize=(20,20))
+#         axarr[0].imshow(in_grid)
+#         axarr[0].set_title('Dataset Images')
+
+#         axarr[1].imshow(out_grid)
+#         axarr[1].set_title('Transformed Images')
+
+
 def predict(trained_model_filepath, parameterize=False, misplacement=False,laplace=False):
 
     """Evaluates the trained network using test subset of data"""
@@ -81,19 +119,28 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False,lapla
     height = images.shape[2]
     width = images.shape[3]
 
+    # STN = Net(
+    #     hype["num_classes"],
+    #     hype["channels"],
+    #     hype["filter1_out"],
+    #     hype["filter2_out"],
+    #     hype["kernel_size"],
+    #     hype["padding"],
+    #     hype["stride"],
+    #     height,
+    #     width,
+    #     hype["pool"],
+    #     parameterize,
+    # )
+
     STN = Net(
-        hype["num_classes"],
         hype["channels"],
-        hype["filter1_out"],
-        hype["filter2_out"],
+        hype["enc_sizes"],
+        hype["loc_sizes"],
         hype["kernel_size"],
         hype["padding"],
-        hype["stride"],
-        height,
-        width,
-        hype["pool"],
-        parameterize,
-    )
+        hype["num_classes"],
+        parameterize).to(device)
     model = STN.to(device).eval()
 
     state_dict = torch.load(
@@ -107,7 +154,7 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False,lapla
     
     if laplace:
         print('start_laplace')
-        subnetwork_mask = ModuleNameSubnetMask(model, module_names=['last_layer'])
+        subnetwork_mask = ModuleNameSubnetMask(model, module_names=['stn.fc_loc.2'])
         print('step 2')
         subnetwork_mask.select()
         print('step 3')
@@ -123,8 +170,9 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False,lapla
         print('fit')
         la.fit(train_loader)
         print('optimize')
-        la.optimize_prior_precision(method="marglik")
+        #la.optimize_prior_precision(method="marglik")
         print('end_laplace')
+        print(la)
 
     with torch.no_grad():
         #model.eval()
@@ -133,6 +181,7 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False,lapla
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             if laplace:
+                logger.info('running laplace')
                 output = la(data)
             else:
                 output = model(data)
@@ -156,7 +205,7 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False,lapla
                 100.0 * correct / len(test_loader.dataset),
             )
         )
-        print(f"[MAP] Acc.: {acc_map:.1%}; ECE: {ece_map:.1%}; NLL: {nll_map:.3}")
+        print(f"[Laplace] Acc.: {acc_map:.1%}; ECE: {ece_map:.1%}; NLL: {nll_map:.3}")
 
         accuracy = correct / len(test_loader.dataset)
 

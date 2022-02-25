@@ -11,7 +11,8 @@ import torch.nn.functional as F
 from torch import nn, optim
 
 
-from src.models.SpatialTN import Net
+#from src.models.SpatialTN import Net
+from src.models.SpatialTN_2 import Net
 from src.models.Hyperparameters import Hyperparameters as hp
 from src.data import make_dataset
 from src.utils import SaveLoad
@@ -63,20 +64,30 @@ def train(
     logger.info("Training STN")
 
     # Initialize the model and transfer to GPU if available
+    # STN = Net(
+    #     hype["num_classes"],
+    #     hype["channels"],
+    #     hype["filter1_out"],
+    #     hype["filter2_out"],
+    #     hype["kernel_size"],
+    #     hype["padding"],
+    #     hype["stride"],
+    #     height,
+    #     width,
+    #     hype["pool"],
+    #     parameterize,
+    # )
+
     STN = Net(
-        hype["num_classes"],
         hype["channels"],
-        hype["filter1_out"],
-        hype["filter2_out"],
+        hype["enc_sizes"],
+        hype["loc_sizes"],
         hype["kernel_size"],
         hype["padding"],
-        hype["stride"],
-        height,
-        width,
-        hype["pool"],
-        parameterize,
-    )
+        hype["num_classes"],
+        parameterize).to(device)
     model = STN.to(device)
+    logger.info(model)
 
     optimizer = optim.Adam(model.parameters(), lr=hype["lr"])
     criterion = nn.CrossEntropyLoss()
@@ -86,7 +97,7 @@ def train(
     # initialize wandb
     wandb.init(
         project="Bayesian DL",
-        name="STN_DEEP_MNIST_ver_3",
+        name="STN_2_run_1",
         entity="zefko",
     )
 
@@ -127,7 +138,7 @@ def train(
                 output = model(data)
 
                 # sum up batch loss
-                test_loss += criterion(output, target, size_average=False).item()
+                test_loss += criterion(output, target).item()
                 # get the index of the max log-probability
                 pred = output.max(1, keepdim=True)[1]
                 correct += pred.eq(target.view_as(pred)).sum().item()
