@@ -76,49 +76,50 @@ class MnistRandomPlacement(Dataset):
             return im, int(target)
 
 
-def data(batch_size, crop_size, misplacement=True):
+def data(batch_size, crop_size, split=0.7, misplacement=True):
 
     if misplacement:
 
-        train_mnist = MnistRandomPlacement(crop_size, 10, "train", True)
-        test_mnist = MnistRandomPlacement(crop_size, 10, "test", True)
-
-        train_loader = torch.utils.data.DataLoader(
-            train_mnist, batch_size=batch_size, shuffle=True, num_workers=2
-        )
-
-        test_loader = torch.utils.data.DataLoader(
-            test_mnist, batch_size=batch_size, shuffle=True, num_workers=2
-        )
+        train_set = MnistRandomPlacement(crop_size, 10, "train", True)
+        test_set = MnistRandomPlacement(crop_size, 10, "test", True)
 
     else:
         # Training dataset
-        train_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(
-                root="src/data/MNIST/",
-                train=True,
-                download=True,
-                transform=transforms.Compose(
-                    [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-                ),
+
+        train_set = datasets.MNIST(
+            root="src/data/MNIST/",
+            train=True,
+            download=True,
+            transform=transforms.Compose(
+                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
             ),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=2,
         )
 
-        # Test dataset
-        test_loader = torch.utils.data.DataLoader(
-            datasets.MNIST(
-                root="src/data/MNIST/",
-                train=False,
-                transform=transforms.Compose(
-                    [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
-                ),
+        # test set
+        test_set = datasets.MNIST(
+            root="src/data/MNIST/",
+            train=False,
+            transform=transforms.Compose(
+                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
             ),
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=2,
         )
 
-    return train_loader, test_loader
+    # split train,val,test
+
+    train_n = int(split * len(train_set))
+    val_n = len(train_set) - train_n
+    train_set, val_set = torch.utils.data.random_split(train_set, [train_n, val_n])
+
+    train_loader = torch.utils.data.DataLoader(
+        train_set, batch_size=batch_size, shuffle=True, num_workers=2
+    )
+
+    val_loader = torch.utils.data.DataLoader(
+        val_set, batch_size=batch_size, shuffle=True, num_workers=2
+    )
+
+    test_loader = torch.utils.data.DataLoader(
+        test_set, batch_size=batch_size, shuffle=True, num_workers=2
+    )
+
+    return train_loader, val_loader, test_loader

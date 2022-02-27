@@ -15,7 +15,7 @@ class Hyperparameters:
             "epochs": 5,
             "crop_size": 128,
             "enc_sizes":[16,32],
-            "loc_sizes":[8,10],
+            "loc_sizes":[8,16],
         },
     ):
         super().__init__()

@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from numpy import False_
 import torch
-from src.models.SpatialTN import Net
+from src.models.SpatialTN_2 import Net
 from src.models.Hyperparameters import Hyperparameters as hp
 from src.utils import SaveLoad
 from src.data import make_dataset
@@ -15,7 +15,7 @@ from netcal.metrics import ECE
 @click.argument(
     "trained_model_filepath",
     type=click.Path(),
-    default="models/colab_best_misMNIST_20.pth",
+    default="saved_models/colab_best_misMNIST_20_STN2__ver_2lr.pth",
 )
 @click.option(
     "-m",
@@ -57,7 +57,7 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False):
     #     test_set, batch_size=hype["batch_size"], shuffle=False, num_workers=2
     # )
     # logger.info(f"Length of Test Data : {len(test_set)}")
-    _, test_loader = make_dataset.data(
+    _,_, test_loader = make_dataset.data(
         hype["batch_size"], hype["crop_size"], misplacement
     )
     dataiter = iter(test_loader)
@@ -67,20 +67,30 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False):
     height = images.shape[2]
     width = images.shape[3]
 
+    # STN = Net(
+    #     hype["num_classes"],
+    #     hype["channels"],
+    #     hype["filter1_out"],
+    #     hype["filter2_out"],
+    #     hype["kernel_size"],
+    #     hype["padding"],
+    #     hype["stride"],
+    #     height,
+    #     width,
+    #     hype["pool"],
+    #     parameterize,
+    # )
+
     STN = Net(
-        hype["num_classes"],
         hype["channels"],
-        hype["filter1_out"],
-        hype["filter2_out"],
+        hype["enc_sizes"],
+        hype["loc_sizes"],
         hype["kernel_size"],
         hype["padding"],
-        hype["stride"],
-        height,
-        width,
-        hype["pool"],
-        parameterize,
-    )
+        hype["num_classes"],
+        parameterize)
     model = STN.to(device)
+    logger.info(model)
 
     state_dict = torch.load(
         project_dir.joinpath(trained_model_filepath), map_location=torch.device(device)
