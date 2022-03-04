@@ -18,99 +18,48 @@ from src.models.Hyperparameters import Hyperparameters as hp
 from src.data import make_dataset
 from src.utils import compute_dim
 from laplace.utils import ModuleNameSubnetMask
+import click
 
 
 
 
 
-class Net(nn.Module):
-    def __init__(
-        self,
-        num_classes,
-        channels,
-        filter_1_out,
-        filter_2_out,
-        kernel_size,
-        padding,
-        stride,
-        height,
-        width,
-        pool,
+class Base(nn.Module):
+    def __init__(self, enc_sizes, kernel, pad):
+        super().__init__()
+
         
-    ):
-        super(Net, self).__init__()
-        self.num_classes = (num_classes,)
-        self.channels = (channels,)
-        self.filter_1_out = (filter_1_out,)
-        self.filter_2_out = (filter_2_out,)
-        self.kernel_size = (kernel_size,)
-        self.padding = (padding,)
-        self.stride = (stride,)
-        self.height = (height,)
-        self.width = (width,)
-        self.pool = (pool,)
+        conv_blocks =[compute_dim.conv_block(in_f, out_f, kernel_size=kernel, padding=pad) 
+                       for in_f, out_f in zip(enc_sizes, enc_sizes[1:])]
+
+        self.base_net = nn.Sequential(*conv_blocks)
         
 
-        self.conv1 = nn.Conv2d(channels, filter_1_out, kernel_size)
-        # evaluating image dimensions after first connvolution
-        self.conv1_out_height = compute_dim.compute_conv_dim(
-            height, kernel_size, padding, stride
-        )
-        self.conv1_out_width = compute_dim.compute_conv_dim(
-            width, kernel_size, padding, stride
-        )
+    def forward(self,x):
+        x = self.base_net(x)
+    
+        return x
 
-        # first pooling
-        self.pool1 = nn.MaxPool2d(pool, pool)
-        # evaluating image dimensions after first pooling
-        self.conv2_out_height = compute_dim.compute_pool_dim(
-            self.conv1_out_height, pool, pool
-        )
-        self.conv2_out_width = compute_dim.compute_pool_dim(
-            self.conv1_out_width, pool, pool
-        )
-
-        # Second Convolution
-        self.conv2 = nn.Conv2d(filter_1_out, filter_2_out, kernel_size)
-        # evaluating image dimensions after second convolution
-        self.conv3_out_height = compute_dim.compute_conv_dim(
-            self.conv2_out_height, kernel_size, padding, stride
-        )
-        self.conv3_out_width = compute_dim.compute_conv_dim(
-            self.conv2_out_width, kernel_size, padding, stride
-        )
-        self.conv2_drop = nn.Dropout2d()
-
-        # Second pooling
-        self.pool2 = nn.MaxPool2d(pool, pool)
-        # evaluating image dimensions after second pooling
-        self.conv4_out_height = compute_dim.compute_pool_dim(
-            self.conv3_out_height, pool, pool
-        )
-        self.conv4_out_width = compute_dim.compute_pool_dim(
-            self.conv3_out_width, pool, pool
-        )
-
+class Vanilla(nn.Module):
+    def __init__(self, in_c, enc_sizes, kernel, pad,n_classes):
+        super().__init__()
+    
+        self.enc_sizes = [in_c, *enc_sizes]
+        self.kernel = kernel
+        self.pad = pad
+        self.n_classes = n_classes
+        
+        self.base = Base(self.enc_sizes,self.kernel,self.pad)
         self.fc1 = nn.Linear(
-            filter_2_out * self.conv4_out_height * self.conv4_out_width, 50
+            self.enc_sizes[-1] * 4* 4 , 50
         )
-        self.fc2 = nn.Linear(50, num_classes)
-
+        self.fc2 = nn.Linear(50, self.n_classes)
         
 
-    def forward(self, x):
-
+    def forward(self,x):
         
-        # convolutional layer 1
-        x = F.relu(self.pool1(self.conv1(x)))
-
-        # convolutional layer 2
-        x = F.relu(self.pool2(self.conv2_drop(self.conv2(x))))
-
-        x = x.view(
-            -1, self.filter_2_out[0] * self.conv4_out_height * self.conv4_out_width
-        )
-
+        x = self.base(x)        
+        x = x.flatten(1)
         x = F.relu(self.fc1(x))
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
@@ -136,19 +85,21 @@ def laplace(model,dataloader,method='last',module='fc1'):
             "classification",
             subset_of_weights="subnetwork",
             hessian_structure="full",
-            subnetwork_indices = subnetwork_indices#.type(torch.LongTensor),
+            subnetwork_indices = subnetwork_indices.type(torch.LongTensor),
         )
         la.fit(dataloader)
+        la.prior_precision = torch.tensor([000.1])
         
     return la
 
+@click.command()
+@click.argument(
+    "trained_model_filepath",
+    type=click.Path(),
+    default="saved_models/colab_best_Vanilla_MNIST_20.pth",
+)
 
-
-
-
-
-
-def main():
+def main(trained_model_filepath):
     """Evaluates the trained network using test subset of data"""
     logger = logging.getLogger(__name__)
     logger.info("Evaluating a trained network using a test subset")
@@ -173,27 +124,17 @@ def main():
     images, _ = dataiter.next()
     print("image shape", images.shape)
 
-    height = images.shape[2]
-    width = images.shape[3]
-
-    Vanilla = Net(
-        hype["num_classes"],
+    
+    model = Vanilla(
         hype["channels"],
-        hype["filter1_out"],
-        hype["filter2_out"],
+        hype["enc_sizes"],
         hype["kernel_size"],
         hype["padding"],
-        hype["stride"],
-        height,
-        width,
-        hype["pool"],
-    )
+        hype["num_classes"]).to(device).eval()
 
     
-    model = Vanilla.to(device).eval()
     logger.info(model)
 
-    trained_model_filepath = '/Users/georgioszefkilis/Bayesian_Deep_Learning/saved_models/colab_best_Vanilla_MNIST_20.pth'
     state_dict = torch.load(
         project_dir.joinpath(trained_model_filepath), map_location=torch.device(device)
     )
@@ -236,13 +177,15 @@ def main():
     print(
         f"[Laplace] Acc.: {acc_laplace:.1%}; ECE: {ece_laplace:.1%}; NLL: {nll_laplace:.3}"
     )
-
+    for name, module in model.named_modules():
+        print(name)
+    
     #subetwork laplace
-    sub_laplace = laplace(model,train_loader,method='sub',module='fc1')
+    sub_laplace = laplace(model,train_loader,method='sub',module='base.base_net.1.0')
     acc_sublaplace,ece_sublaplace,nll_sublaplace = predict(test_loader, sub_laplace, laplace=True)
 
     print(
-        f"[Laplace] Acc.: {acc_sublaplace:.1%}; ECE: {ece_sublaplace:.1%}; NLL: {nll_sublaplace:.3}"
+        f"[Subnetwork Laplace] Acc.: {acc_sublaplace:.1%}; ECE: {ece_sublaplace:.1%}; NLL: {nll_sublaplace:.3}"
     )
 
 

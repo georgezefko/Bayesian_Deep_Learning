@@ -85,7 +85,7 @@ class Net(nn.Module):
         self.base = Base(self.enc_sizes,self.kernel,self.pad)
         self.stn = STN(self.loc_sizes ,self.kernel, self.pad, self.parameterize)
         self.fc1 = nn.Linear(
-            self.enc_sizes[-1] * 4* 4 , 50
+            self.enc_sizes[-1] * 12* 12 , 50
         )
         self.fc2 = nn.Linear(50, self.n_classes)
         

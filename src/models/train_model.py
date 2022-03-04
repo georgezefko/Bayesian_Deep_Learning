@@ -26,6 +26,10 @@ def train(
     valid_loss_min_input=0.05,
     misplacement=False,
     parameterize=False,
+    load=True,
+    save=True,
+   
+    
 ):
     # Check if there is a GPU available to use
     if torch.cuda.is_available():
@@ -48,14 +52,15 @@ def train(
     # hypperparameters config
     hype = hp().config
 
-    train_loader, test_loader = make_dataset.data(
-        hype["batch_size"], hype["crop_size"], misplacement
-    )
+    # import data
+    train_loader,val_loader,_ = make_dataset.data(hype["batch_size"], hype["crop_size"], misplacement,load,save
+        )
 
+
+    print("finished loading data")
     dataiter = iter(train_loader)
     images, _ = dataiter.next()
-    height = images.shape[2]
-    width = images.shape[3]
+    
     print("image shape", images.shape)
 
     log_fmt = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -64,20 +69,6 @@ def train(
     logger.info("Training STN")
 
     # Initialize the model and transfer to GPU if available
-    # STN = Net(
-    #     hype["num_classes"],
-    #     hype["channels"],
-    #     hype["filter1_out"],
-    #     hype["filter2_out"],
-    #     hype["kernel_size"],
-    #     hype["padding"],
-    #     hype["stride"],
-    #     height,
-    #     width,
-    #     hype["pool"],
-    #     parameterize,
-    # )
-
     STN = Net(
         hype["channels"],
         hype["enc_sizes"],
@@ -85,21 +76,28 @@ def train(
         hype["kernel_size"],
         hype["padding"],
         hype["num_classes"],
-        parameterize).to(device)
+        parameterize)
     model = STN.to(device)
     logger.info(model)
 
-    optimizer = optim.Adam(model.parameters(), lr=hype["lr"])
+    optimizer = optim.Adam([
+                {'params': model.base.parameters()},
+                {'params':model.fc1.parameters()},
+                {'params':model.fc2.parameters()},
+                {'params':model.stn.fc_loc.parameters(),'lr': hype["learning_rate_stn"]},
+                {'params': model.stn.localization.parameters(), 'lr': hype["learning_rate_stn"]}
+            ], lr=hype["learning_rate_base"])
+
     criterion = nn.CrossEntropyLoss()
 
     # initialize tracker for minimum validation loss
     valid_loss_min = valid_loss_min_input
     # initialize wandb
     wandb.init(
-        project="Bayesian DL",
-        name="STN_2_run_1",
-        entity="zefko",
-    )
+       project="Bayesian DL",
+       name="STN_2_run_1",
+       entity="zefko",
+   )
 
     for epoch in range(1, hype["epochs"] + 1):
 
@@ -133,7 +131,7 @@ def train(
             test_loss = 0
             correct = 0
 
-            for data, target in test_loader:
+            for data, target in val_loader:
                 data, target = data.to(device), target.to(device)
                 output = model(data)
 
@@ -143,21 +141,21 @@ def train(
                 pred = output.max(1, keepdim=True)[1]
                 correct += pred.eq(target.view_as(pred)).sum().item()
 
-            test_loss /= len(test_loader.dataset)
+            test_loss /= len(val_loader.dataset)
 
             wandb.log(
-                {
-                    "Validation loss": test_loss,
-                    "Validation_accuracy": 100.0 * correct / len(test_loader.dataset),
-                }
-            )
+               {
+                   "Validation loss": test_loss,
+                   "Validation_accuracy": 100.0 * correct / len(val_loader.dataset),
+               }
+           )
 
             print(
                 "\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
                     test_loss,
                     correct,
-                    len(test_loader.dataset),
-                    100.0 * correct / len(test_loader.dataset),
+                    len(val_loader.dataset),
+                    100.0 * correct / len(val_loader.dataset),
                 )
             )
 
@@ -172,7 +170,7 @@ def train(
         # save checkpoint
         SaveLoad.save_ckp(checkpoint, False, checkpoint_path, best_model_path)
         # log the stn outputs
-        visualization.wandb_pred(model, test_loader, device)
+        visualization.wandb_pred(model, val_loader, device)
 
         ## TODO: save the model if validation loss has decreased
         if test_loss <= valid_loss_min:

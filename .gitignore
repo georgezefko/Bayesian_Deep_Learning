@@ -93,7 +93,8 @@ notebooks/wandb
 wandb/
 
 #mnist
-src/data/MNIST
+src/data/MNIST/MNIST/
+src/data/misMNIST/
 notebooks/MNIST
 notebooks/src
 src/models/src

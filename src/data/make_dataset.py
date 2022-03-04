@@ -3,6 +3,8 @@ import torch
 from torchvision import datasets, transforms
 from torch.utils.data import Dataset
 import numpy as np
+import pickle
+import os
 
 
 class MnistRandomPlacement(Dataset):
@@ -76,15 +78,45 @@ class MnistRandomPlacement(Dataset):
             return im, int(target)
 
 
-def data(batch_size, crop_size, split=0.7, misplacement=True):
+def split(train_set):
+    train_n = int(0.7 * len(train_set))
+    val_n = len(train_set) - train_n
+    train_set, val_set = torch.utils.data.random_split(train_set, [train_n, val_n])
+    return train_set,val_set
+    
+
+
+def data(batch_size, crop_size, misplacement=True,load=True,save=True):
+    
 
     if misplacement:
+        
+        if load:
+            train_set = torch.load(r"/Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed/train_misMNIST.pt")
+            val_set = torch.load(r"/Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed/val_misMNIST.pt")
+            test_set = torch.load(r"/Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed/test_misMNIST.pt")
+            
+            
+        else:
 
-        train_set = MnistRandomPlacement(crop_size, 10, "train", True)
-        test_set = MnistRandomPlacement(crop_size, 10, "test", True)
+            train_set = MnistRandomPlacement(crop_size, 10, "train", True)
+            test_set = MnistRandomPlacement(crop_size, 10, "test", True)
+            
+            train_set,val_set = split(train_set)
+            
+        
+            if not os.path.exists(r"/Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed"):
+                os.makedirs(r"/Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed")
+                
+            if save:
+                torch.save(train_set,r"//Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed/train_misMNIST.pt")
+                torch.save(val_set,r"/Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed/val_misMNIST.pt")
+                torch.save(test_set,r"/Users/georgioszefkilis/Bayesian_Deep_Learning/src/data/misMNIST/processed/test_misMNIST.pt")
+            
 
     else:
         # Training dataset
+        print("Getting MNIST")
 
         train_set = datasets.MNIST(
             root="src/data/MNIST/",
@@ -103,23 +135,35 @@ def data(batch_size, crop_size, split=0.7, misplacement=True):
                 [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
             ),
         )
+        
+        train_set,val_set=split(train_set)
 
-    # split train,val,test
+    
 
-    train_n = int(split * len(train_set))
-    val_n = len(train_set) - train_n
-    train_set, val_set = torch.utils.data.random_split(train_set, [train_n, val_n])
-
+    
     train_loader = torch.utils.data.DataLoader(
         train_set, batch_size=batch_size, shuffle=True, num_workers=2
     )
+    
+    print("Train_data", len(train_loader.dataset))
+    
+    assert len(train_loader.dataset)>0,"Train loader is empty"
 
     val_loader = torch.utils.data.DataLoader(
         val_set, batch_size=batch_size, shuffle=True, num_workers=2
     )
+    print("Validation_data", len(val_loader.dataset))
+
+    assert len(val_loader.dataset)>0,"Validation loader is empty"
+
 
     test_loader = torch.utils.data.DataLoader(
         test_set, batch_size=batch_size, shuffle=True, num_workers=2
     )
+    print("Test_data", len(test_loader.dataset))
 
-    return train_loader, val_loader, test_loader
+    
+    assert len(test_loader.dataset)>0,"Test loader is empty"
+
+
+    return train_loader,val_loader, test_loader

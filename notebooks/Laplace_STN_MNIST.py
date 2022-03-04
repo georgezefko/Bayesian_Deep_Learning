@@ -26,31 +26,6 @@ import click
 
 
 
-@click.command()
-@click.argument(
-    "trained_model_filepath",
-    type=click.Path(),
-    default="saved_models/colab_misMNIST_20_STN2__ver_2.pth",
-)
-@click.option(
-    "-m",
-    "--misplacement",
-    type=bool,
-    default=False,
-    help="Select false to train the model on misplacement MNIST (default=False)",
-)
-@click.option(
-    "-pr",
-    "--parameterize",
-    type=bool,
-    default=False,
-    help="Select false to train only the scale theta parameters use only on misplacement MNIST (default=False)",
-)
-
-        
-
-   
-
 def laplace(model,dataloader,method='last',module='fc1'):
     if method == 'last':
         la = Laplace(
@@ -64,22 +39,57 @@ def laplace(model,dataloader,method='last',module='fc1'):
     else:
         subnetwork_mask = ModuleNameSubnetMask(model, module_names=[module])
         subnetwork_mask.select()
-        subnetwork_indices = subnetwork_mask.indices
+        subnetwork_indices = subnetwork_mask.indices.type(torch.LongTensor)
         la = Laplace(
             model,
             "classification",
             subset_of_weights="subnetwork",
             hessian_structure="full",
-            subnetwork_indices = subnetwork_indices#.type(torch.LongTensor),
+            subnetwork_indices = subnetwork_indices.type(torch.LongTensor),
         )
         la.fit(dataloader)
+        la.prior_precision = torch.tensor([10000])
         
     return la
 
+@click.command()
+@click.argument(
+    "trained_model_filepath",
+    type=click.Path(),
+    default="saved_models/STN_MNIST_10_HPC.pth",
+)
+@click.option(
+    "-m",
+    "--misplacement",
+    type=bool,
+    default=False,
+    help="Select true to train the model on misplacement MNIST (default=False)",
+)
+@click.option(
+    "-pr",
+    "--parameterize",
+    type=bool,
+    default=False,
+    help="Select true to train only the scale theta parameters use only on misplacement MNIST (default=False)",
+)
+
+@click.option(
+    "-lo",
+    "--load",
+    type=bool,
+    default=True,
+    help="Select false to create data (default=True)",
+)
+@click.option(
+    "-sa",
+    "--save",
+    type=bool,
+    default=True,
+    help="Select false to not overwrite existing data (default=True)",
+)
 
 
-
-def main(trained_model_filepath,parameterize=False, misplacement=False):
+def main(trained_model_filepath,parameterize=False, misplacement=False,load=True,save=True):
     """Evaluates the trained network using test subset of data"""
     logger = logging.getLogger(__name__)
     logger.info("Evaluating a trained network using a test subset")
@@ -97,8 +107,8 @@ def main(trained_model_filepath,parameterize=False, misplacement=False):
     # Load the hyperparameters
     hype = hp().config
 
-    train_loader,_, test_loader = make_dataset.data(
-        hype["batch_size"], hype["crop_size"], misplacement
+    train_loader,_,test_loader = make_dataset.data(
+        hype["batch_size"], hype["crop_size"], misplacement,load,save
     )
     
     STN = Net(
@@ -116,7 +126,7 @@ def main(trained_model_filepath,parameterize=False, misplacement=False):
 
     
 
-    trained_model_filepath = '/Users/georgioszefkilis/Bayesian_Deep_Learning/saved_models/colab_misMNIST_20_STN2__ver_2.pth'
+    #trained_model_filepath = '/Users/georgioszefkilis/Bayesian_Deep_Learning/saved_models/colab_misMNIST_20_STN2__ver_2.pth'
     state_dict = torch.load(
         project_dir.joinpath(trained_model_filepath), map_location=torch.device(device)
     )
@@ -153,15 +163,20 @@ def main(trained_model_filepath,parameterize=False, misplacement=False):
 
     
     # Laplace
+    logger.info("Laplace evaluation")
+    print('Laplace evaluation')
     la = laplace(model,train_loader,method='last')
     acc_laplace,ece_laplace,nll_laplace = predict(test_loader, la, laplace=True)
 
     print(
         f"[Laplace] Acc.: {acc_laplace:.1%}; ECE: {ece_laplace:.1%}; NLL: {nll_laplace:.3}"
     )
-
+    for name, module in model.named_modules():
+        print(name)
     #subetwork laplace
-    sub_laplace = laplace(model,train_loader,method='sub',module='fc1')
+    logger.info("Subnetwork Laplace evaluation")
+    print('Subnetwork Laplce evaluation')
+    sub_laplace = laplace(model,train_loader,method='sub',module='base.base_net.1.0')
     acc_sublaplace,ece_sublaplace,nll_sublaplace = predict(test_loader, sub_laplace, laplace=True)
 
     print(
