@@ -15,7 +15,7 @@ import torch.nn.functional as F
 import torch.distributions as dists
 from netcal.metrics import ECE
 from src.models.Hyperparameters import Hyperparameters as hp
-from src.models.SpatialTN_2 import Net
+from src.models.SpatialTN import Net
 
 from src.data import make_dataset
 from src.utils import compute_dim

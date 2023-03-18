@@ -5,117 +5,61 @@ from src.utils import compute_dim
 from src.utils import AffineTransform
 
 
-class Net(nn.Module):
-    def __init__(
-        self,
-        num_classes,
-        channels,
-        filter_1_out,
-        filter_2_out,
-        kernel_size,
-        padding,
-        stride,
-        height,
-        width,
-        pool,
-        parameterize,
-    ):
-        super(Net, self).__init__()
-        self.num_classes = (num_classes,)
-        self.channels = (channels,)
-        self.filter_1_out = (filter_1_out,)
-        self.filter_2_out = (filter_2_out,)
-        self.kernel_size = (kernel_size,)
-        self.padding = (padding,)
-        self.stride = (stride,)
-        self.height = (height,)
-        self.width = (width,)
-        self.pool = (pool,)
-        self.parameterize = parameterize
 
-        self.conv1 = nn.Conv2d(channels, filter_1_out, kernel_size)
-        # evaluating image dimensions after first connvolution
-        self.conv1_out_height = compute_dim.compute_conv_dim(
-            height, kernel_size, padding, stride
-        )
-        self.conv1_out_width = compute_dim.compute_conv_dim(
-            width, kernel_size, padding, stride
-        )
 
-        # first pooling
-        self.pool1 = nn.MaxPool2d(pool, pool)
-        # evaluating image dimensions after first pooling
-        self.conv2_out_height = compute_dim.compute_pool_dim(
-            self.conv1_out_height, pool, pool
-        )
-        self.conv2_out_width = compute_dim.compute_pool_dim(
-            self.conv1_out_width, pool, pool
-        )
 
-        # Second Convolution
-        self.conv2 = nn.Conv2d(filter_1_out, filter_2_out, kernel_size)
-        # evaluating image dimensions after second convolution
-        self.conv3_out_height = compute_dim.compute_conv_dim(
-            self.conv2_out_height, kernel_size, padding, stride
-        )
-        self.conv3_out_width = compute_dim.compute_conv_dim(
-            self.conv2_out_width, kernel_size, padding, stride
-        )
-        self.conv2_drop = nn.Dropout2d()
+class Base(nn.Module):
+    def __init__(self, enc_sizes,pool,stride,kernel, pad):
+        super().__init__()
 
-        # Second pooling
-        self.pool2 = nn.MaxPool2d(pool, pool)
-        # evaluating image dimensions after second pooling
-        self.conv4_out_height = compute_dim.compute_pool_dim(
-            self.conv3_out_height, pool, pool
-        )
-        self.conv4_out_width = compute_dim.compute_pool_dim(
-            self.conv3_out_width, pool, pool
-        )
+        
+        conv_blocks =[compute_dim.conv_block(in_f, out_f,pool,stride, kernel_size=kernel, padding=pad) 
+                            for in_f, out_f in zip(enc_sizes, enc_sizes[1:])]
 
-        self.fc1 = nn.Linear(
-            filter_2_out * self.conv4_out_height * self.conv4_out_width, 50
-        )
-        self.fc2 = nn.Linear(50, num_classes)
+        self.base_net = nn.Sequential(*conv_blocks)
+        
 
-        # Spatial transformer localization-network
-        self.localization = nn.Sequential(
-            nn.Conv2d(1, 8, kernel_size=7),
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(),
-            nn.Conv2d(8, 10, kernel_size=5),
-            nn.MaxPool2d(2, stride=2),
-            nn.ReLU(),
-        )
+    def forward(self,x):
+        x = self.base_net(x)
+    
+        return x
+
+
+class STN(nn.Module):
+    def __init__(self,loc_sizes,pool,stride,kernel,pad,parameterize):
+        super().__init__()
+    
+        self.parameterize =parameterize
+        
+        conv_blocks =[compute_dim.conv_block(in_f, out_f,pool,stride, kernel_size=kernel, padding=pad) 
+                       for in_f, out_f in zip(loc_sizes, loc_sizes[1:])]
+
+        self.localization = nn.Sequential(*conv_blocks)
+
         # Regressor for the affine matrix
         self.fc_loc = nn.Sequential(
-            # nn.Linear(10 * 3 * 3, 32),  # original
-            nn.Linear(10 * 28 * 28, 32),
+            nn.Linear(loc_sizes[-1] *4*4,32),#32
             nn.ReLU(),
-            #nn.Linear(32, 2 * 1 if self.parameterize else 3 * 2),
+            nn.Linear(32, 2 * 1 if parameterize else 3 * 2),#20
         )
-        self.last_layer = nn.Linear(32, 2 * 1 if self.parameterize else 3 * 2)
-        # Initialize the weights/bias with identity transformation
-        self.last_layer.weight.data.zero_()
-        if self.parameterize:
-            bias = torch.tensor([0, 0], dtype=torch.float)
-            self.last_layer.bias.data.copy_(bias[:2].view(-1))
-            # self.fc_loc[2].bias.data.copy_(torch.tensor([1], dtype=torch.float))
+        
+        self.fc_loc[-1].weight.data.zero_()
+        if parameterize:
+            bias = torch.tensor([0,0], dtype=torch.float)
+            self.fc_loc[-1].bias.data.copy_(bias[:2].view(-1))
 
         else:
-            self.last_layer.bias.data.copy_(
-                torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float)
+        
+            self.fc_loc[-1].bias.data.copy_(
+                 torch.tensor([1, 0, 0, 0, 1, 0], dtype=torch.float)
             )
+        
 
-    # Spatial transformer network forward function
-    def stn(self, x):
+    def forward(self,x):
         xs = self.localization(x)
-
-        # xs = xs.view(-1, 10 * 3 * 3)  # original
-        xs = xs.view(-1, 10 * 28 * 28)
-
+        
+        xs = xs.view(-1, xs.shape[1] * xs.shape[2] * xs.shape[3])
         theta = self.fc_loc(xs)
-        theta = self.last_layer(theta)
 
         if self.parameterize:
             theta = AffineTransform.make_affine_parameters(theta)
@@ -127,23 +71,38 @@ class Net(nn.Module):
 
         return x
 
-    def forward(self, x):
+class Net(nn.Module):
+    def __init__(self, in_c, enc_sizes, loc_sizes,pool,stride, kernel, pad,n_classes,parameterize):
+        super().__init__()
+    
+        self.enc_sizes = [in_c, *enc_sizes]
+        self.loc_sizes = [in_c, *loc_sizes]
+        self.pool =pool
+        self.stride = stride
+        self.kernel = kernel
+        self.pad = pad
+        self.parameterize = parameterize
+        self.n_classes = n_classes
+        
+        self.base = Base(self.enc_sizes,self.pool,self.stride,self.kernel,self.pad)
+        self.stn = STN(self.loc_sizes ,self.pool,self.stride,self.kernel, self.pad, self.parameterize)
+        self.fc1 = nn.Linear(
+            self.enc_sizes[-1] * 4* 4, 50
+        )
+        self.fc2 = nn.Linear(50, self.n_classes)
+        
 
+    def forward(self,x):
         # transform the input
         x = self.stn(x)
 
-        # convolutional layer 1
-        x = F.relu(self.pool1(self.conv1(x)))
-
-        # convolutional layer 2
-        x = F.relu(self.pool2(self.conv2_drop(self.conv2(x))))
-
-        x = x.view(
-            -1, self.filter_2_out[0] * self.conv4_out_height * self.conv4_out_width
-        )
-
+        x = self.base(x)
+        
+        x = x.flatten(1)
+        
         x = F.relu(self.fc1(x))
         x = F.dropout(x, training=self.training)
         x = self.fc2(x)
 
-        return x#F.log_softmax(x, dim=1)
+        return x
+

@@ -1,23 +1,20 @@
 import logging
-import os
-import pickle
 from pathlib import Path
 import wandb
-
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
-import torch.nn.functional as F
+
 from torch import nn, optim
 
+from torchsummary import summary
+from src.models.Vanilla_CNN import Vanilla_Net
+from src.models.SpatialTN import Net
+#from src.models.stn_pcam import Net
 
-#from src.models.SpatialTN import Net
-from src.models.SpatialTN_2 import Net
 from src.models.Hyperparameters import Hyperparameters as hp
 from src.data import make_dataset
-from src.utils import SaveLoad
+from src.utils import SaveLoad,visualization
 
-from src.utils import visualization
 
 
 def train(
@@ -25,11 +22,11 @@ def train(
     model_path,
     valid_loss_min_input=0.05,
     misplacement=False,
+    rotation=False,
     parameterize=False,
     load=True,
     save=True,
-   
-    
+    subset=False, 
 ):
     # Check if there is a GPU available to use
     if torch.cuda.is_available():
@@ -48,15 +45,16 @@ def train(
     # Set file paths depending on running locally or on Azure
     best_model_path = project_dir.joinpath(model_path)
     checkpoint_path = project_dir.joinpath(check_path)
+    # cam_path = str(project_dir) + "/src/data/PCAM/"
 
     # hypperparameters config
     hype = hp().config
+    
+    # split set
+    train_loader,val_loader,_ = make_dataset.data(hype["batch_size"], hype["crop_size"], hype["train_subset"], hype["dataset"],
+                                misplacement,rotation,load,save,subset)
 
-    # import data
-    train_loader,val_loader,_ = make_dataset.data(hype["batch_size"], hype["crop_size"], misplacement,load,save
-        )
-
-
+    
     print("finished loading data")
     dataiter = iter(train_loader)
     images, _ = dataiter.next()
@@ -67,47 +65,159 @@ def train(
     logging.basicConfig(level=logging.INFO, format=log_fmt)
     logger = logging.getLogger(__name__)
     logger.info("Training STN")
+    # initialize wandb for the different datasets
+    if hype['dataset']=='PCAM':
+
+        if hype['stn']:
+            wandb.init(
+                project="Bayesian DL",
+                name="STN_PCAM",
+                entity="zefko",)
+        else:
+            wandb.init(
+                project="Bayesian DL",
+                name="Vanilla_PCAM",
+                entity="zefko",)
+
+    elif hype['dataset']=='GTSRB':
+
+        if hype['stn']:
+            
+            wandb.init(
+                project="Bayesian DL",
+                name="STN_GTSRB",
+                entity="zefko",)
+        else:
+            wandb.init(
+                project="Bayesian DL",
+                name="Vanilla_GTSRB",
+                entity="zefko",)
+    
+    elif hype['dataset']=='GTSDB':
+
+        if hype['stn']:
+            
+            wandb.init(
+                project="Bayesian DL",
+                name="STN_GTSDB",
+                entity="zefko",)
+        else:
+            wandb.init(
+                project="Bayesian DL",
+                name="Vanilla_GTSDB",
+                entity="zefko",)
+
+    elif hype['dataset']=='Mapiliary':
+
+        if hype['stn']:
+            
+            wandb.init(
+                project="Bayesian DL",
+                name="STN_Mapiliary",
+                entity="zefko",)
+        else:
+            wandb.init(
+                project="Bayesian DL",
+                name="Vanilla_Mapiliary",
+                entity="zefko",)
+    else:
+        if hype['stn']:
+            if misplacement:
+                wandb.init(
+                    project="Bayesian DL",
+                    name="STN_misMNIST",
+                    entity="zefko",)
+            else:
+                wandb.init(
+                    project="Bayesian DL",
+                    name="STN_MNIST",
+                    entity="zefko",)
+        else:
+            if misplacement:
+                wandb.init(
+                    project="Bayesian DL",
+                    name="Vanilla_misMNIST",
+                    entity="zefko",)
+            else:
+                wandb.init(
+                    project="Bayesian DL",
+                    name="Vanilla_MNIST",
+                    entity="zefko",)
+    
 
     # Initialize the model and transfer to GPU if available
-    STN = Net(
+    if hype["stn"]:
+
+        STN = Net(
+            hype["channels"],
+            hype["enc_sizes"],
+            hype["loc_sizes"],
+            hype["pool"],
+            hype["stride"],
+            hype["kernel_size"],
+            hype["padding"],
+            hype["num_classes"],
+            parameterize)
+
+        model = STN.to(device)
+
+    else:
+        Vanilla = Vanilla_Net(
         hype["channels"],
         hype["enc_sizes"],
-        hype["loc_sizes"],
+        hype["pool"],
+        hype["stride"],
         hype["kernel_size"],
         hype["padding"],
-        hype["num_classes"],
-        parameterize)
-    model = STN.to(device)
-    logger.info(model)
+        hype["num_classes"])
 
-    optimizer = optim.Adam([
-                {'params': model.base.parameters()},
-                {'params':model.fc1.parameters()},
-                {'params':model.fc2.parameters()},
-                {'params':model.stn.fc_loc.parameters(),'lr': hype["learning_rate_stn"]},
-                {'params': model.stn.localization.parameters(), 'lr': hype["learning_rate_stn"]}
+
+
+        Vanilla = Vanilla_Net(
+        
+        hype["num_classes"])
+        
+        model = Vanilla.to(device)
+    
+    
+    logger.info(model)
+    
+    print('Weights and Biases',[ (name,np.prod(p.size())) for name,p in model.named_parameters() if p.requires_grad])
+    
+
+    summary(model,(images.shape[1],images.shape[2],images.shape[3]))
+
+    
+    if hype['stn']:
+        
+        optimizer = optim.Adam([
+                    {'params': model.base.parameters()},
+                    {'params':model.fc1.parameters()},
+                    {'params':model.fc2.parameters()},
+                    {'params':model.stn.fc_loc.parameters(),'lr': hype["learning_rate_stn"]},
+                    {'params': model.stn.localization.parameters(), 'lr': hype["learning_rate_stn"]}
             ], lr=hype["learning_rate_base"])
+    else:
+        optimizer = optim.Adam(model.parameters(),hype["learning_rate_base"],)
 
     criterion = nn.CrossEntropyLoss()
 
     # initialize tracker for minimum validation loss
     valid_loss_min = valid_loss_min_input
-    # initialize wandb
-    wandb.init(
-       project="Bayesian DL",
-       name="STN_2_run_1",
-       entity="zefko",
-   )
+
+    
 
     for epoch in range(1, hype["epochs"] + 1):
 
-        wandb.watch(model, optimizer, log="all", log_freq=10)
+        #wandb.watch(model, optimizer, log="all", log_freq=10)
         train_loss = 0
         model.train()
         for batch_idx, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
+            target = torch.flatten(target.type(torch.LongTensor)).to(device)
 
             optimizer.zero_grad()
+
             output = model(data)
             loss = criterion(output, target)
             loss.backward()
@@ -115,7 +225,7 @@ def train(
             train_loss += loss.item()
 
             if batch_idx % 500 == 0:
-                wandb.log({"epoch": epoch, "loss": loss.item()})
+                #wandb.log({"epoch": epoch, "loss": loss.item()})
                 print(
                     "Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}".format(
                         epoch,
@@ -133,6 +243,7 @@ def train(
 
             for data, target in val_loader:
                 data, target = data.to(device), target.to(device)
+                target = torch.flatten(target.type(torch.LongTensor)).to(device)
                 output = model(data)
 
                 # sum up batch loss
@@ -144,11 +255,11 @@ def train(
             test_loss /= len(val_loader.dataset)
 
             wandb.log(
-               {
-                   "Validation loss": test_loss,
-                   "Validation_accuracy": 100.0 * correct / len(val_loader.dataset),
-               }
-           )
+                {
+                    "Validation loss": test_loss,
+                    "Validation_accuracy": 100.0 * correct / len(val_loader.dataset),
+                }
+            )
 
             print(
                 "\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n".format(
@@ -169,8 +280,10 @@ def train(
 
         # save checkpoint
         SaveLoad.save_ckp(checkpoint, False, checkpoint_path, best_model_path)
-        # log the stn outputs
-        visualization.wandb_pred(model, val_loader, device)
+        
+        if hype['stn']:
+            # log the stn outputs
+            visualization.wandb_pred(model, val_loader, device)
 
         ## TODO: save the model if validation loss has decreased
         if test_loss <= valid_loss_min:
@@ -182,3 +295,15 @@ def train(
             # save checkpoint as best model
             SaveLoad.save_ckp(checkpoint, True, checkpoint_path, best_model_path)
             valid_loss_min = test_loss
+        
+    wandb.log({'channels':hype["channels"],
+    'batch_size':hype["batch_size"],
+    'lr base':hype["learning_rate_base"],
+    'lr_loc':hype["learning_rate_stn"],
+    'loc size':hype["loc_sizes"],
+        'base size':hype["enc_sizes"],
+        'pool':hype["pool"],
+        'stride':hype["stride"],
+        'kernel size':hype["kernel_size"],
+        'padding':hype["padding"],
+        'classes':hype["num_classes"]})

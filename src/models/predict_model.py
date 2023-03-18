@@ -3,6 +3,7 @@ from pathlib import Path
 from numpy import False_
 import torch
 from src.models.SpatialTN_2 import Net
+from src.models.Vanilla_CNN import Vanilla_Net
 from src.models.Hyperparameters import Hyperparameters as hp
 from src.utils import SaveLoad
 from src.data import make_dataset
@@ -15,7 +16,7 @@ from netcal.metrics import ECE
 @click.argument(
     "trained_model_filepath",
     type=click.Path(),
-    default="saved_models/colab_best_misMNIST_20_STN2__ver_2lr.pth",
+    default="/zhome/fc/5/104708/Desktop/Thesis/saved_models/Vanilla_MAP.pth"
 )
 @click.option(
     "-m",
@@ -31,7 +32,19 @@ from netcal.metrics import ECE
     default=False,
     help="Select false to train only the scale theta parameters use only on misplacement MNIST (default=False)",
 )
-def predict(trained_model_filepath, parameterize=False, misplacement=False):
+
+@click.option(
+    "-lo",
+    "--load",
+    type=bool,
+    default=True,
+    help="Select false to create data (default=True)",
+)
+def predict(trained_model_filepath, misplacement=False,
+    parameterize=False,
+    load=True,
+    save=True,
+    subset=False, ):
 
     """Evaluates the trained network using test subset of data"""
     logger = logging.getLogger(__name__)
@@ -50,47 +63,43 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False):
     # Load the hyperparameters
     hype = hp().config
 
-    # test_set_path = str(project_dir) + "/src/data/MNIST/MNIST/processed/test.pt"
-    # test_imgs, test_labels = torch.load(test_set_path)
-    # test_set = torch.utils.data.TensorDataset(test_imgs, test_labels)
-    # test_loader = torch.utils.data.DataLoader(
-    #     test_set, batch_size=hype["batch_size"], shuffle=False, num_workers=2
-    # )
-    # logger.info(f"Length of Test Data : {len(test_set)}")
-    _,_, test_loader = make_dataset.data(
-        hype["batch_size"], hype["crop_size"], misplacement
-    )
+    _,_,test_loader= make_dataset.data(hype["batch_size"], hype["crop_size"], hype["train_subset"], hype["dataset"],
+                                misplacement,load,save,subset)
+
     dataiter = iter(test_loader)
     images, _ = dataiter.next()
     print("image shape", images.shape)
 
-    height = images.shape[2]
-    width = images.shape[3]
 
-    # STN = Net(
-    #     hype["num_classes"],
-    #     hype["channels"],
-    #     hype["filter1_out"],
-    #     hype["filter2_out"],
-    #     hype["kernel_size"],
-    #     hype["padding"],
-    #     hype["stride"],
-    #     height,
-    #     width,
-    #     hype["pool"],
-    #     parameterize,
-    # )
 
-    STN = Net(
+    # Initialize the model and transfer to GPU if available
+    if hype["stn"]:
+
+        STN = Net(
+            hype["channels"],
+            hype["enc_sizes"],
+            hype["loc_sizes"],
+            hype["pool"],
+            hype["stride"],
+            hype["kernel_size"],
+            hype["padding"],
+            hype["num_classes"],
+            parameterize)
+
+        model = STN.to(device)
+
+    else:
+        Vanilla = Vanilla_Net(
         hype["channels"],
         hype["enc_sizes"],
-        hype["loc_sizes"],
+        hype["pool"],
+        hype["stride"],
         hype["kernel_size"],
         hype["padding"],
-        hype["num_classes"],
-        parameterize)
-    model = STN.to(device)
-    logger.info(model)
+        hype["num_classes"])
+        
+        model = Vanilla.to(device)
+    
 
     state_dict = torch.load(
         project_dir.joinpath(trained_model_filepath), map_location=torch.device(device)
@@ -108,10 +117,6 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False):
             data, target = data.to(device), target.to(device)
             output = model(data)
 
-            acc_map = (output.argmax(-1) == target).float().mean()
-            ece_map = ECE(bins=15).measure(output.numpy(), target.numpy())
-            nll_map = -dists.Categorical(output).log_prob(target).mean()
-
             ps = torch.exp(output)
 
             # Keep track of how many are correctly classified
@@ -126,11 +131,10 @@ def predict(trained_model_filepath, parameterize=False, misplacement=False):
                 100.0 * correct / len(test_loader.dataset),
             )
         )
-        print(f"[MAP] Acc.: {acc_map:.1%}; ECE: {ece_map:.1%}; NLL: {nll_map:.3}")
 
         accuracy = correct / len(test_loader.dataset)
 
-        return accuracy, acc_map, ece_map, nll_map
+        return accuracy
 
 
 if __name__ == "__main__":
