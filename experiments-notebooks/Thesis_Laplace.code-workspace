@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../../Laplace"
+		},
+		{
+			"path": "../../../pSTN-baselines"
+		}
+	],
+	"settings": {
+		"python.dataScience.jupyterServerURI": "local"
+	}
+}
