@@ -1,0 +1,4 @@
+,MAP,Laplace optimization,Laplace no optimization,Laplace small prior,Laplace large prior,Subnetwork Laplace,Subnetwork Laplace small prior,Subnetwork Laplace large prior
+Acc,82.4%,82.2%,80.0%,38.0%,82.4%,83.6%,82.2%,82.4%
+ECE,4.3%,3.4%,46.9%,21.6%,3.9%,11.1%,11.3%,3.4%
+NLL,0.581,0.576,1.27,2.14,0.578,0.622,0.663,0.578
